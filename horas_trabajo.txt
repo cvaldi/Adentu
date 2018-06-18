@@ -1,0 +1,49 @@
+Paneles
+=======
+
+Etapa 1:
+
+Dom 17/06/18 22:50 - 00:50 ( 2 horas )
+
+Notas
+* Instalar tifffile, exifread usando pip
+* Imagen TIFF es de 16 bits, no normalizada
+    Ejemplo: 
+        import tifffile as tiff
+        I = tiff.imread('07-40-34-945_radiometric.tiff') # numpy array!
+* Imagen digital.jpg tiene info de EXIF
+    Ejemplo:
+        import exifread
+        exif = exifread.process_file(open('07-39-28-055_digital.jpg','rb'))
+        # exif es un diccionario con lo siguiente:
+        {'EXIF ColorSpace': (0xA001) Short=Uncalibrated @ 200,
+         'EXIF ComponentsConfiguration': (0x9101) Undefined=YCbCr @ 176,
+         'EXIF DateTimeOriginal': (0x9003) ASCII=2018:06:05 07:39:28 @ 208,
+         'EXIF ExifVersion': (0x9000) Undefined=0230 @ 152,
+         'EXIF FlashPixVersion': (0xA000) Undefined=0100 @ 188,
+         'GPS GPSAltitude': (0x0006) Ratio=831453/1000 @ 378,
+         'GPS GPSLatitude': (0x0002) Ratio=[26, 22, 29411/1000] @ 330,
+         'GPS GPSLatitudeRef': (0x0001) ASCII=S @ 250,
+         'GPS GPSLongitude': (0x0004) Ratio=[70, 4, 11403/250] @ 354,
+         'GPS GPSLongitudeRef': (0x0003) ASCII=W @ 274,
+         'GPS GPSMeasureMode': (0x000A) ASCII=3 @ 322,
+         'GPS GPSTimeStamp': (0x0007) Ratio=[4294967285, 4294967285, 4294967285] @ 386,
+         'GPS GPSVersionID': (0x0000) Byte=[2, 3, 0, 0] @ 238,
+         'Image ExifOffset': (0x8769) Long=142 @ 90,
+         'Image GPSInfo': (0x8825) Long=228 @ 102,
+         'Image Make': (0x010F) ASCII=Workswell @ 110,
+         'Image Model': (0x0110) ASCII=WIRIS @ 120,
+         'Image ResolutionUnit': (0x0128) Short=Not Absolute @ 66,
+         'Image XResolution': (0x011A) Ratio=1 @ 126,
+         'Image YCbCrPositioning': (0x0213) Short=Centered @ 78,
+         'Image YResolution': (0x011B) Ratio=1 @ 134}
+* La imagen RGB (digital.jpg) y la termográfica (radiometric.tiff) NO están perfectamente sincronizadas al inicio, pero ésta mejora sutancialmente en el vuelo
+* La orientación de dron sería ideal que siguiera la orientación de la trayectoria ( o no?)
+* Se puede obtener una transformación de homografía entre la imagen RGB y la imagen termográfica.
+    --> Con una sola imagen no basta!
+        --> Alguna cámara se mueve en el trayecto?
+        --> Depende de la orientación?
+        --> Ver alguna forma de obtener una transformación por cada par de imágenes
+        
+* Existen grandes diferencias en la temoeratura medida dentro de un mismo panel. Al parecer la temperatura del suelo influye y se refleja por el panel.
+* Podríamos revisar si el panel tiene "hot spots" que o sean uniformes dentro del panel.
