@@ -6,7 +6,7 @@ from skimage.measure import regionprops
 from sklearn.linear_model import RANSACRegressor
 import os
 
-imgroot = '/home/ivan/Documents/Adentu/Paneles/1'
+imgroot = '/home/ivan/Documents/Adentu/DATA/Paneles/1'
 imglist = [os.path.join(imgroot, img) for img in sorted(os.listdir(imgroot))]
 
 ksize = (21,11)

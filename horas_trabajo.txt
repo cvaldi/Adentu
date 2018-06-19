@@ -46,4 +46,12 @@ Notas
         --> Ver alguna forma de obtener una transformación por cada par de imágenes
         
 * Existen grandes diferencias en la temoeratura medida dentro de un mismo panel. Al parecer la temperatura del suelo influye y se refleja por el panel.
-* Podríamos revisar si el panel tiene "hot spots" que o sean uniformes dentro del panel.
+* Podríamos revisar si el panel tiene "hot spots" que no sean uniformes dentro del panel.
+
+Lun 18/06/18 23:20 - 00:52 (1.5 horas)
+
+Notas
+* Se logró mejorar la segmentación de paneles a partir de imagen RGB, buscando el mejor calce don un ahomografía propuesta.
+* Imágenes de vuelo 1 (~ 7:30) no se ven bien, las de las 9:15 (vuelo 17) presentan mejor apareincia visual en el canal térmico.
+* Evaluando a 38 metros --> buen compromiso entre resolución y rapidez de captura.
+* Pendiente: detección de puntos/zonas calientes dentro de panel.
