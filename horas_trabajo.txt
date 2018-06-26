@@ -4,6 +4,7 @@ Paneles
 Etapa 1:
 
 Dom 17/06/18 22:50 - 00:50 ( 2 horas )
+--------------------------------------
 
 Notas
 * Instalar tifffile, exifread usando pip
@@ -49,9 +50,18 @@ Notas
 * Podríamos revisar si el panel tiene "hot spots" que no sean uniformes dentro del panel.
 
 Lun 18/06/18 23:20 - 00:52 (1.5 horas)
+--------------------------------------
 
 Notas
 * Se logró mejorar la segmentación de paneles a partir de imagen RGB, buscando el mejor calce don un ahomografía propuesta.
 * Imágenes de vuelo 1 (~ 7:30) no se ven bien, las de las 9:15 (vuelo 17) presentan mejor apareincia visual en el canal térmico.
 * Evaluando a 38 metros --> buen compromiso entre resolución y rapidez de captura.
 * Pendiente: detección de puntos/zonas calientes dentro de panel.
+
+Mar 16/0672018 23:00 - 02:00 (3.0 horas)
+-----------------------------------------
+
+Notas
+* Se revisó la segmentación preliminar en el vuelo 17, a 38 metros. Funciona bien en la gran mayoría de las imágenes, aunque algunas no (cambias parámetros de captura)
+* Puntos de calor son perfectamente visibles, habría que ver qué heurística usar para hacer una detección preliminar
+* Idea preliminar: usar algoritmo de detección de anomalías
