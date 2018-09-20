@@ -93,15 +93,15 @@ for img in img_test:
     IBW = np.zeros(IRGB.shape[:2]).astype(np.uint8)
     IBW[ind] = ((clasif+1)/2*255).astype(np.uint8)
     
-    IBW = cv2.dilate(cv2.erode(IBW, np.ones((10,10))), np.ones((10,10)))
-    IBW = cv2.erode(cv2.dilate(IBW, np.ones((4,4))), np.ones((4,4)))
+    #~ IBW = cv2.dilate(cv2.erode(IBW, np.ones((10,10))), np.ones((10,10)))
+    #~ IBW = cv2.erode(cv2.dilate(IBW, np.ones((4,4))), np.ones((4,4)))
     
     IBW = IBW // 255
     
     #~ IBW_NOT = cv2.erode(cv2.dilate(IBW_NOT, np.ones((10,10))), np.ones((10,10)))
     #~ IBW = 255 - IBW_NOT
     
-    cv2.imwrite(os.path.join(out_folder, os.path.basename(img)), IRGB*IBW[:,:,None])
+    cv2.imwrite(os.path.join(out_folder, os.path.basename(img)), cv2.cvtColor(IRGB*IBW[:,:,None], cv2.COLOR_RGB2BGR))
     #~ pl.figure()
     #~ pl.imshow(IRGB)
     #~ pl.figure()

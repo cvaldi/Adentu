@@ -1,0 +1,258 @@
+# coding: utf-8
+from __future__ import print_function
+from __future__ import division
+
+# ###############################################################
+# Codigo para etapa 01 de extracción de fallas en imágenes de
+# paneles solares
+#
+# Versión 1.0
+#
+# Iván Lillo Vallés - Septiembre de 2018
+
+# ###############################################################
+
+import cv2
+import os
+import numpy as np
+from sklearn.svm import SVC, LinearSVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+import matplotlib.pyplot as pl
+import pickle
+import tifffile as tiff
+import exifread 
+
+class PanelSearch(object):
+    '''
+    Clase para realizar pruebas de la primera etapa de detección de fallas en paneles solares.
+    
+    Instanciar la clase:
+    
+        ps = PanelSearch()
+
+    Funciones:
+        ps.train_segmentation(masks_dir [, model_dir])
+            Entrena un modelo para efectuar la segmentación de paneles a partir de máscaras
+            anotadas en colores verde-rojo (cerde panel, rojo no panel). Guarda el modelo en
+            la carpeta "models" relativa a donde se ejecuta el código, o se le puede pasar
+            un parámetro opcional "model_dir" para especificar la ruta de los modelos.
+            
+        
+    '''
+    def __init__(self):
+        self.models_dir = 'models'
+        self.segm_model = None
+        
+        pts_origin = [  [279,30],
+                        [409,33],
+                        [130,750],
+                        [246,796],
+                        [649,110],
+                        [798,117],
+                        [498,832],
+                        [632,873],
+                        [1015,193],
+                        [1182,202],
+                        [860,913],
+                        [1013,959]]
+
+        pts_target = [  [175,66],
+                        [216,67],
+                        [125,298],
+                        [161,311],
+                        [292,92],
+                        [339,94],
+                        [241,324],
+                        [284,338],
+                        [408,118],
+                        [461,123],
+                        [358,351],
+                        [405,365]]
+        
+        self.pts_origin = np.array(pts_origin).astype(float)
+        self.pts_target = np.array(pts_target).astype(float)
+
+        self.H = cv2.findHomography(self.pts_origin, self.pts_target)
+        
+        self.dx = 120
+    
+    def set_models_dir(self, mdir):
+        if not os.path.exists(mdir):
+            os.makedirs(mdir)
+        self.models_dir = mdir
+    
+    ####### SEGMENTATION ############################################################################
+    
+    def __get_segm_feats(self, IRGB, ind_P = None):
+        if ind_P is None:
+            ind_P = np.where(IRGB[:,:,0] >= 0)
+        feat_P = IRGB[ind_P].astype(np.float)
+        mean_floor = IRGB[np.where(IRGB[:,:,2] < IRGB[:,:,0]+30)].mean(axis=0).reshape(1,-1)
+        feat_P = np.concatenate((feat_P, np.tile(mean_floor, (len(feat_P),1)), np.ones((len(feat_P),1)) ), axis=1)
+        return feat_P, ind_P
+        
+    def train_segmentation(self, masks_dir, model_dir = None, verbose=False):
+        '''
+        masks_dir: carpeta de imágenes, con las imágenes originales y sus máscaras
+        model_dir (opcional): ruta de carpeta de modelos.
+        '''
+        if model_dir is not None:
+            self.set_models_dir(model_dir)
+        else:
+            self.set_models_dir(self.models_dir)
+        img_dir = masks_dir
+        
+        if verbose:
+            print("Cargando imágenes desde " + masks_dir)
+        # creacion de features
+
+        FEAT_P = []
+        FEAT_NP = []
+        YP = []
+        YNP = []
+        for img_path in [os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'JPG' in o]:
+            if verbose:
+                print(img_path)
+            IRGB = cv2.cvtColor(cv2.imread(img_path.replace('_JPG','')), cv2.COLOR_BGR2RGB)
+            IMASK = cv2.imread(img_path)
+
+            ind_P = np.where(IMASK[:,:,1] > 200)
+            ind_NP = np.where(IMASK[:,:,2] > 200)
+            
+            feat_P,_ = self.__get_segm_feats(IRGB, ind_P)[::500]
+            feat_NP,_ = self.__get_segm_feats(IRGB, ind_NP)[::1000]
+
+            FEAT_P.extend(feat_P.tolist())
+            YP.extend([1]*len(feat_P))
+            FEAT_NP.extend(feat_NP.tolist())
+            YNP.extend([-1]*len(feat_NP))
+
+        if verbose:
+            print("Número de pixeles positivos: " + str(len(FEAT_P)))
+            print("Número de pixeles negativos: " + str(len(FEAT_NP)))
+        
+        model = LinearSVC(class_weight='balanced')
+        X = np.array(FEAT_P + FEAT_NP).astype(np.float)
+        Y = np.array(YP + YNP)
+        model.fit(X,Y)
+        pickle.dump(model, open(os.path.join(self.models_dir, 'segm.pkl'), 'wb'))
+        if verbose:
+            print("Modelo de segmentación guardado en " + os.path.join(self.models_dir, 'segm.pkl'))
+    
+    def segmentation(self, img_path, show_img = False, out_path = None):
+        if type(img_path) == str or type(img_path) == unicode:
+            if not os.path.exists(img_path):
+                print("Imagen " + img_path + " no existe!")
+                return None
+        if self.segm_model is None:
+            if not os.path.exists(os.path.join(self.models_dir, 'segm.pkl')):
+                print("Modelo de segmentación no ha sido creado!")
+                return None
+            self.segm_model = pickle.load(open(os.path.join(self.models_dir, 'segm.pkl'), 'rb'))
+        if self.segm_model:
+            if type(img_path) == str or type(img_path) == unicode:
+                IRGB = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+            else:
+                IRGB = img_path
+            
+            feat_P, ind = self.__get_segm_feats(IRGB)
+            
+            clasif = self.segm_model.predict(feat_P)
+            
+            IBW = np.zeros(IRGB.shape[:2]).astype(np.uint8)
+            IBW[ind] = ((clasif+1)/2*255).astype(np.uint8)
+            
+            IBW = cv2.dilate(cv2.erode(IBW, np.ones((10,10))), np.ones((10,10)))
+            IBW = cv2.erode(cv2.dilate(IBW, np.ones((4,4))), np.ones((4,4)))
+            
+            IBW = IBW // 255
+            
+            #~ IBW_NOT = cv2.erode(cv2.dilate(IBW_NOT, np.ones((10,10))), np.ones((10,10)))
+            #~ IBW = 255 - IBW_NOT
+            
+            ISEGM = cv2.cvtColor(IRGB*IBW[:,:,None], cv2.COLOR_RGB2BGR)
+            
+            if show_img:
+                pl.imshow(ISEGM)
+                pl.show()
+            
+            if out_path:
+                if not os.path.exists(os.path.dirname(out_path)):
+                    os.makedirs(os.path.dirname(out_path))
+                cv2.imwrite(out_path, ISEGM)
+            
+            return ISEGM, IBW
+    
+    ####### THERMAL AND RGB IMAGE REISTRATION #########################################################
+
+    def get_exif_data(self, imrgb):
+        return exifread.process_file(open(imrgb,'rb'))
+        
+    def register_thermal_RGB(self, imrgb, imtiff):
+        if not os.path.exists(imrgb):
+            print("Imagen RGB inexistente: " + imrgb)
+            return None
+        if not os.path.exists(imtiff):
+            print("Imagen TIFF inexistente: " + imtiff)
+            return None
+        
+        IRGB = cv2.cvtColor(cv2.imread(imrgb), cv2.COLOR_BGR2RGB)
+        ITERM = tiff.imread(imtiff).astype(float)
+        
+        exif = self.get_exif_data(imrgb)
+        
+        height = eval(str(exif['GPS GPSAltitude']))
+        print("Altitude: " + str(height))
+        
+        ITERM2 = ((ITERM - ITERM.min())/(ITERM.max()-ITERM.min())*255).astype(np.uint8)
+        
+        print( (ITERM.min(), ITERM.max(), ITERM.mean()) )
+        
+        I2 = cv2.warpPerspective(IRGB, self.H[0], ITERM2.shape[::-1], flags=cv2.INTER_AREA)
+        
+        ERGB = cv2.Canny(I2, 250, 350)
+        ERGB[np.where(cv2.dilate((I2[:,:,0]==0).astype(np.uint8)*255, np.ones((10,10))))] = 0
+        ERGB = ERGB[self.dx:-self.dx, self.dx:-self.dx]
+        
+        ERGB = cv2.dilate(ERGB, np.ones((5,5)))
+        ETERM = cv2.Canny(ITERM2, 10, 140)
+        ETERM = cv2.dilate(ETERM, np.ones((5,5)))
+
+        res = cv2.matchTemplate(ERGB, ETERM, cv2.TM_CCOEFF_NORMED)
+        a = res.argmax()
+
+        xd = a%res.shape[0] - self.dx
+        yd = a//res.shape[0] - self.dx
+
+        H2 = np.array([[1,0,xd],[0,1,yd],[0,0,1]]).astype(np.float)
+        I3 = cv2.warpPerspective(I2, H2, (I2.shape[1], I2.shape[0]), flags=cv2.INTER_AREA)
+        
+        ISEGM, IBW = self.segmentation(I3)
+
+        return ITERM*(ITERM<7820)*IBW, IRGB, ITERM2
+
+    def detect_hotspot(self, ITERM):
+        pass
+        
+
+if __name__ == "__main__":
+    ps = PanelSearch()
+    img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_17_38m-7ms-SF72-SL80-GSD5_(1de4)/Imagenes'
+
+    RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o])
+    RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o])
+
+    print(len(RGBlist))
+
+    for imrgb, imtiff in zip(RGBlist, RAWlist):
+        print(imrgb)
+        ITERM_reg, IRGB, ITERM = ps.register_thermal_RGB(imrgb, imtiff)
+        pl.figure()
+        pl.imshow(IRGB)
+        pl.figure()
+        pl.imshow(ITERM)
+        pl.figure()
+        pl.imshow(ITERM_reg, vmin=7400, vmax=7820)
+        pl.show()
