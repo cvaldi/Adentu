@@ -19,6 +19,8 @@ from sklearn.svm import SVC, LinearSVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import RANSACRegressor
+
 import matplotlib.pyplot as pl
 import pickle
 import tifffile as tiff
@@ -165,7 +167,7 @@ class PanelSearch(object):
             IBW[ind] = ((clasif+1)/2*255).astype(np.uint8)
             
             IBW = cv2.dilate(cv2.erode(IBW, np.ones((10,10))), np.ones((10,10)))
-            IBW = cv2.erode(cv2.dilate(IBW, np.ones((4,4))), np.ones((4,4)))
+            IBW = cv2.erode(cv2.dilate(IBW, np.ones((4,4))), np.ones((10,10)))
             
             IBW = IBW // 255
             
@@ -185,7 +187,7 @@ class PanelSearch(object):
             
             return ISEGM, IBW
     
-    ####### THERMAL AND RGB IMAGE REISTRATION #########################################################
+    ####### THERMAL AND RGB IMAGE REGISTRATION #########################################################
 
     def get_exif_data(self, imrgb):
         return exifread.process_file(open(imrgb,'rb'))
@@ -231,7 +233,7 @@ class PanelSearch(object):
         
         ISEGM, IBW = self.segmentation(I3)
 
-        return ITERM*(ITERM<7820)*IBW, IRGB, ITERM2
+        return ITERM*IBW, IRGB
 
     def detect_hotspot(self, ITERM):
         pass
@@ -240,7 +242,10 @@ class PanelSearch(object):
 if __name__ == "__main__":
     ps = PanelSearch()
     img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_17_38m-7ms-SF72-SL80-GSD5_(1de4)/Imagenes'
+    #~ img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_07_38m-7ms-SF72-SL60-GSD5/Imagenes'
 
+    #~ RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o and '09-18-31' in o])
+    #~ RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o and '09-18-31' in o])
     RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o])
     RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o])
 
@@ -248,11 +253,60 @@ if __name__ == "__main__":
 
     for imrgb, imtiff in zip(RGBlist, RAWlist):
         print(imrgb)
-        ITERM_reg, IRGB, ITERM = ps.register_thermal_RGB(imrgb, imtiff)
-        pl.figure()
-        pl.imshow(IRGB)
-        pl.figure()
+        ITERM_reg, IRGB = ps.register_thermal_RGB(imrgb, imtiff)
+        
+        idx = np.where(ITERM_reg>0)
+        if len(idx[0]) == 0:
+            continue
+        print(idx)
+        vmin = ITERM_reg[np.where(ITERM_reg>0)].min()
+        vmax = ITERM_reg.max()
+  
+        ITERM = tiff.imread(imtiff).astype(float)
+        ITERM = cv2.cvtColor(np.maximum(np.minimum((ITERM - vmin)/1.7, 255), 0).astype(np.uint8), cv2.COLOR_GRAY2RGB)
+
         pl.imshow(ITERM)
-        pl.figure()
-        pl.imshow(ITERM_reg, vmin=7400, vmax=7820)
+        pl.show()
+       
+        im2, ctrs, hier = cv2.findContours((ITERM_reg > 0).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        IPRED = np.zeros(ITERM_reg.shape)
+        
+        for ctr in ctrs:
+            #print(ctr)
+            I2 = (0*ITERM_reg).astype(np.uint8)
+            cv2.drawContours(I2, [ctr], -1, 255, -1)
+            
+            pl.imshow(I2)
+            pl.show()
+            
+            I3 = cv2.erode(I2, np.ones((10,10)))
+            
+            pl.imshow(I3)
+            pl.show()
+            
+            idx = np.where(I3>0)
+            idx_orig = np.where(I2 > 0)
+            idx_contour = np.where((I3==0) & (I2>0))
+            ITERM_reg[idx_contour] = 0
+            if len(idx) and len(idx[0]) > 500: 
+                X = np.concatenate( (np.array(idx).T[:,::-1], np.ones(len(idx[0])).reshape(-1,1)), axis=1)
+                Y = ITERM_reg[idx]
+                model = RANSACRegressor(residual_threshold = 20)
+                model.fit(X,Y)
+                pred = model.predict(X)
+                IPRED[idx] = pred
+                
+            elif len(idx):
+                ITERM_reg[idx] = 0
+        
+        IFAIL = ((ITERM_reg - IPRED) > 75).astype(np.uint8)
+        IFAIL = cv2.dilate(IFAIL, np.ones((10,10)))
+
+        im2, ctrs, hier = cv2.findContours(IFAIL, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for ctr in ctrs:
+            cv2.drawContours(ITERM,[ctr],0,(255,0,0),2)
+        
+        pl.imshow(ITERM)
         pl.show()
