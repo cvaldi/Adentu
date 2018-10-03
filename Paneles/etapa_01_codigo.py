@@ -192,13 +192,13 @@ class PanelSearch(object):
     def get_exif_data(self, imrgb):
         return exifread.process_file(open(imrgb,'rb'))
         
-    def register_thermal_RGB(self, imrgb, imtiff):
+    def register_thermal_RGB(self, imrgb, imtiff, min_height):
         if not os.path.exists(imrgb):
             print("Imagen RGB inexistente: " + imrgb)
-            return None
+            return None, None
         if not os.path.exists(imtiff):
             print("Imagen TIFF inexistente: " + imtiff)
-            return None
+            return None, None
         
         IRGB = cv2.cvtColor(cv2.imread(imrgb), cv2.COLOR_BGR2RGB)
         ITERM = tiff.imread(imtiff).astype(float)
@@ -206,11 +206,13 @@ class PanelSearch(object):
         exif = self.get_exif_data(imrgb)
         
         height = eval(str(exif['GPS GPSAltitude']))
-        print("Altitude: " + str(height))
         
+        print("Altitud: " + str(height))
+        if height < min_height:
+            print("Imagen descartada")
+            return None, None
+            
         ITERM2 = ((ITERM - ITERM.min())/(ITERM.max()-ITERM.min())*255).astype(np.uint8)
-        
-        print( (ITERM.min(), ITERM.max(), ITERM.mean()) )
         
         I2 = cv2.warpPerspective(IRGB, self.H[0], ITERM2.shape[::-1], flags=cv2.INTER_AREA)
         
@@ -235,56 +237,27 @@ class PanelSearch(object):
 
         return ITERM*IBW, IRGB
 
-    def detect_hotspot(self, ITERM):
-        pass
+    def detect_hotspots(self, imrgb, imtiff, min_height = 0):
+        print("Detectando puntos calientes en imagen " + imrgb)
         
-
-if __name__ == "__main__":
-    ps = PanelSearch()
-    img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_17_38m-7ms-SF72-SL80-GSD5_(1de4)/Imagenes'
-    #~ img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_07_38m-7ms-SF72-SL60-GSD5/Imagenes'
-
-    #~ RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o and '09-18-31' in o])
-    #~ RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o and '09-18-31' in o])
-    RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o])
-    RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o])
-
-    print(len(RGBlist))
-
-    for imrgb, imtiff in zip(RGBlist, RAWlist):
-        print(imrgb)
-        ITERM_reg, IRGB = ps.register_thermal_RGB(imrgb, imtiff)
+        ITERM_reg, IRGB = self.register_thermal_RGB(imrgb, imtiff, min_height)
         
         idx = np.where(ITERM_reg>0)
         if len(idx[0]) == 0:
-            continue
-        print(idx)
-        vmin = ITERM_reg[np.where(ITERM_reg>0)].min()
-        vmax = ITERM_reg.max()
+            return None, None
+        vmean = ITERM_reg[np.where(ITERM_reg>0)].mean()
   
         ITERM = tiff.imread(imtiff).astype(float)
-        ITERM = cv2.cvtColor(np.maximum(np.minimum((ITERM - vmin)/1.7, 255), 0).astype(np.uint8), cv2.COLOR_GRAY2RGB)
-
-        pl.imshow(ITERM)
-        pl.show()
+        ITERM = cv2.cvtColor(np.maximum(np.minimum((ITERM - vmean + 100)/(1.2), 255), 0).astype(np.uint8), cv2.COLOR_GRAY2RGB)
        
         im2, ctrs, hier = cv2.findContours((ITERM_reg > 0).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         IPRED = np.zeros(ITERM_reg.shape)
         
         for ctr in ctrs:
-            #print(ctr)
             I2 = (0*ITERM_reg).astype(np.uint8)
-            cv2.drawContours(I2, [ctr], -1, 255, -1)
-            
-            pl.imshow(I2)
-            pl.show()
-            
+            cv2.drawContours(I2, [ctr], -1, 255, -1)            
             I3 = cv2.erode(I2, np.ones((10,10)))
-            
-            pl.imshow(I3)
-            pl.show()
-            
             idx = np.where(I3>0)
             idx_orig = np.where(I2 > 0)
             idx_contour = np.where((I3==0) & (I2>0))
@@ -304,9 +277,25 @@ if __name__ == "__main__":
         IFAIL = cv2.dilate(IFAIL, np.ones((10,10)))
 
         im2, ctrs, hier = cv2.findContours(IFAIL, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+            
+        final_ctrs = []
         for ctr in ctrs:
-            cv2.drawContours(ITERM,[ctr],0,(255,0,0),2)
+            if cv2.contourArea(ctr) < 700:
+                cv2.drawContours(ITERM,[ctr],0,(255,0,0),2)
+                final_ctrs.append(ctr)
         
+        return ITERM, final_ctrs
+        
+
+if __name__ == "__main__":
+    ps = PanelSearch()
+    img_dir = '/home/ivan/Documents/Adentu/DATA/Paneles/Vuelos/Vuelo_17_38m-7ms-SF72-SL80-GSD5_(1de4)/Imagenes'
+    RGBlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'digital.jpg' in o])
+    RAWlist = sorted([os.path.join(img_dir, o) for o in os.listdir(img_dir) if 'radiometric.tiff' in o])
+
+    print(len(RGBlist))
+
+    for imrgb, imtiff in zip(RGBlist, RAWlist):
+        ITERM,_ = ps.detect_hotspots(imrgb, imtiff)
         pl.imshow(ITERM)
         pl.show()
