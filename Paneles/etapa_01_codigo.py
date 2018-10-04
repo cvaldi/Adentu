@@ -123,8 +123,10 @@ class PanelSearch(object):
             ind_P = np.where(IMASK[:,:,1] > 200)
             ind_NP = np.where(IMASK[:,:,2] > 200)
             
-            feat_P,_ = self.__get_segm_feats(IRGB, ind_P)[::500]
-            feat_NP,_ = self.__get_segm_feats(IRGB, ind_NP)[::1000]
+            feat_P,_ = self.__get_segm_feats(IRGB, ind_P)
+            feat_P = feat_P[::500]
+            feat_NP,_ = self.__get_segm_feats(IRGB, ind_NP)
+            feat_NP = feat_NP[::1000]
 
             FEAT_P.extend(feat_P.tolist())
             YP.extend([1]*len(feat_P))

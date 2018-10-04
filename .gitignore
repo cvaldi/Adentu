@@ -1,4 +1,6 @@
 DATA
 Paneles/output
 Paneles/models
+horas_trabajo.txt
+ILillo_asesoria_costos.ods
 *.pyc
